@@ -1,197 +1,86 @@
-import matplotlib.pyplot as plt
-import numpy as np
 from sklearn import datasets
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from collections import Counter
+
+class KNeighborsClassifier:
+    def __init__(self, k):
+        self.k = k
+
+    def fit(self, X_train, y_train):
+        self.X_train = X_train
+        self.y_train = y_train
+
+    def predict(self, X_test):
+        neighbors = []
+        for x in X_test:
+            distances = np.sqrt(np.sum((x - self.X_train) ** 2, axis=1))
+            y_sorted = [y for _, y in sorted(zip(distances, self.y_train))]
+            neighbors.append(y_sorted[:self.k])
+        return list(map(lambda x: Counter(x).most_common(1)[0][0], neighbors))
+
+    def evaluate(self, X_test, y_test):
+        y_pred = self.predict(X_test)
+        return np.sum(y_pred == y_test) / len(y_test)
 
 
-class Dataset:
-
-    def __init__(self, data, base_size: int, normalize=True):
-        # original
-        self.data = data
-
-        self.desc = data.DESCR
-        self.dataset = data.data
-
-        self.mins, self.maxs = self.mins_maxs(self.dataset)
-
-        # normalized
-        if normalize:
-            self.dataset = self.normalize(data.data.view())
-
-        self.target = data.target
-        self.target_names = data.target_names
-        self.target_count = len(self.target_names)
-        self.feature_names = data.feature_names
-
-        if base_size > len(self.dataset):
-            raise AssertionError(f'study size: {base_size} can\'t be more than actual size: {len(self.dataset)}')
-
-        self.base_data, self.test_data = self.divide_dataset(base_size)
-        self.base_size = len(self.base_data)
-        self.test_size = len(self.dataset) - self.base_size
-        self.k = np.floor(np.sqrt(self.base_size))
-
-    def info(self):
-        # printing optimal K based on base data's size
-        print(f'\nOptimal K: {self.k}\n'
-              f'Common data (items count: {len(self.dataset)}: ) ')
-
-        # printing input normalized data
-        print(f'{self.feature_names}, target, name')
-
-        for i, item in enumerate(self.dataset):
-            target = self.target[i]
-            target_name = self.target_names[target]
-            print(f'{item}, {target}, {target_name}')
-
-        # printing base normalized data
-        print(f'Study data (items count: {len(self.base_data)}): ')
-        print(f'{self.feature_names}, target, name')
-
-        for i, item in enumerate(self.base_data):
-            target = item[-1]
-            target_name = self.target_names[target]
-            print(f'{item}, {target_name}')
-
-        # printing test normalized data
-        print(f'Test data (items count: {len(self.test_data)}): ')
-        print(f'{self.feature_names}, target, name')
-
-        for i, item in enumerate(self.test_data):
-            target = item[-1]
-            target_name = self.target_names[target]
-            print(f'{item}, {target_name}')
-
-    def divide_dataset(self, should_study):
-        base_data, test_data = [], []
-        items_per_target = np.floor(should_study / self.target_count).astype(int)
-        items_per_target_in_ds = np.floor(len(self.dataset) / self.target_count).astype(int)
-
-        for i in range(self.target_count):
-            start = items_per_target_in_ds * i
-            end = items_per_target_in_ds * (i + 1)
-
-            for c, j in enumerate(range(start, end)):
-                item = list(self.dataset[j])
-                item.append(self.target[j])
-                if c <= items_per_target:
-                    base_data.append(item)
-                else:
-                    test_data.append(item)
-
-        return base_data, test_data
-
-    def mins_maxs(self, dataset):
-        mins, maxs = [i for i in dataset[0]], [i for i in dataset[0]]
-        # [[5.31, 4.2, 3.0, 0.2], ...]
-        # from 0 to 3
-        for i in range(len(dataset[0])):
-            # from 0 to dataset's len
-            for j in range(len(dataset)):
-                cur = dataset[j][i]
-                if cur < mins[i]:
-                    mins[i] = cur
-                elif cur > maxs[i]:
-                    maxs[i] = cur
-
-        return mins, maxs
-
-    def __normalize(self, row):
-        for i in range(len(row)):
-            row[i] = "{:.3f}".format((row[i] - self.mins[i]) / (self.maxs[i] - self.mins[i]))
-
-        return row
-
-    def normalize(self, dataset):
-        # fill with default value
-
-        for row in range(len(dataset)):
-            dataset[row] = self.__normalize(dataset[row])
-
-        return dataset
-
-    # param item: ['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)']
-    #
-    # return: target class, target name
-    def knn(self, item, noralized=True):
-
-        if not noralized:
-            item = self.__normalize(item)
-
-        from_ = np.array((tuple(item)))
-        distances = []
-
-        for i in self.base_data:
-            to_ = np.array((tuple(i[0:-1])))
-            # евклидово расстояние для n-мерного пространства
-            distance = np.sqrt(np.sum(np.square(from_ - to_)))
-            distances.append([distance, i[-1]])
-
-        targets = np.zeros(self.target_count)
-        distances.sort(key=lambda x: x[0])
-
-        for dis in distances[0: int(self.k)]:
-            targets[dis[1]] += 1
-
-        max = 0
-        target = targets[0]
-        for i, t in enumerate(targets):
-            if t > max:
-                max = t
-                target = i
-
-        return target, self.target_names[target]
+def normalize_data(dataset):
+    for i in range(len(dataset[0])):
+        column_values = [row[i] for row in dataset]
+        column_min = np.min(column_values)
+        column_max = np.max(column_values)
+        for row in dataset:
+            row[i] = (row[i] - column_min) / (column_max - column_min)
 
 
-class Drawer:
-    colors = ["#000000", "#BA0900", "#6B7900"]
-
-    def __init__(self, dataset: Dataset, x=8, y=6):
-        self.x = x
-        self.y = y
-        self.dataset = dataset
-        self.plot = plt
-
-    def draw(self):
-        target_classes = [element[-1] for element in self.dataset.base_data]
-        target_colors = [self.colors[i] for i in target_classes]
-
-        for i in range(len(self.dataset.base_data[0][:-1])):
-            for j in range(i + 1, len(self.dataset.base_data[0][:-1])):
-                feature_one = [element[i] for element in self.dataset.base_data]
-                feature_two = [element[j] for element in self.dataset.base_data]
-
-                self.plot.scatter(feature_one, feature_two, c=target_colors)
-                self.plot.xlabel(self.dataset.feature_names[i])
-                self.plot.ylabel(self.dataset.feature_names[j])
-                self.plot.show()
+# Variables
+k = 20  # Runs with a given number
+test_size = 0.4
 
 
-if __name__ == '__main__':
-    # dataset obj
-    iris = Dataset(datasets.load_iris(), base_size=100)
+def sandbox():
+    # Prepare data
+    iris = datasets.load_iris()
+    targets = iris.target
+    df = pd.DataFrame(iris.data, columns=iris.feature_names)
+    df['Species'] = targets
 
-    # print info
-    iris.info()
+    # Showing
+    x = iris.get('data')
+    sns.pairplot(df, hue="Species", height=3)
+    plt.show()
 
-    # get test dataset
-    test_dataset = iris.test_data
+    # Normalizing
+    normalize_data(x)
 
-    # draw before normalization
-    Drawer(Dataset(datasets.load_iris(), base_size=100, normalize=False)).draw()
+    df.data = x
+    sns.pairplot(df, hue="Species", height=3)
+    plt.show()
 
-    # draw after normalization
-    Drawer(iris).draw()
+    # Train
+    y = iris.get('target')
+    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
 
-    # test each element
-    for i, item in enumerate(test_dataset):
-        target_class, target_name = iris.knn(item[0: -1])
-        print(f'input {i}: {item[0: -1]} \n'
-              f'expected class: {item[-1]}, actual class: {target_class} - {target_name}')
+    # For all
+    accuracies = []
+    for current_value in range(1, k):
+        knn = KNeighborsClassifier(k=current_value)
+        knn.fit(X_train, y_train)
+        accuracy = knn.evaluate(X_test, y_test)
+        accuracies.append(accuracy)
 
-    # test from console
-    in_ = None
-    while not in_ == "exit":
-        in_ = [float(i) for i in input(
-            "enter ['sepal length (cm)', 'sepal width (cm)', 'petal length (cm)', 'petal width (cm)']: ").split(" ")]
-        print(f'result class: {iris.knn(np.array(in_), False)[1]}')
+    # Final draw
+    fig, ax = plt.subplots()
+    ax.plot(range(1, k), accuracies)
+    ax.set(xlabel="k", ylabel="accuracy")
+    plt.show()
+
+    best_accuracy = np.array(accuracies).max()
+    print(best_accuracy)
+
+if __name__ == "__main__":
+    sandbox()
